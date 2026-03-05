@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Revenue Accrual & Fee Reconciliation Engine — Sara Iqbal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --white:    #ffffff;
+  --bg:       #f7f8fc;
+  --surface:  #ffffff;
+  --border:   #e4e8f0;
+  --border2:  #d0d7e6;
+  --navy:     #0f2044;
+  --navy2:    #1a3460;
+  --blue:     #1e5fcc;
+  --teal:     #0e7c6e;
+  --red:      #c0392b;
+  --amber:    #b7610a;
+  --green:    #176a3c;
+  --text:     #1a2033;
+  --muted:    #64748b;
+  --light:    #94a3b8;
+  --serif:    'Playfair Display', serif;
+  --sans:     'DM Sans', sans-serif;
+  --mono:     'DM Mono', monospace;
+  --shadow:   0 1px 4px rgba(15,32,68,0.07), 0 4px 16px rgba(15,32,68,0.05);
+  --shadow2:  0 2px 8px rgba(15,32,68,0.10), 0 8px 32px rgba(15,32,68,0.07);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; line-height:1.6; }
+
+/* ── Header ── */
+header {
+  background: var(--navy);
+  padding: 0 40px;
+  position: relative;
+  overflow: hidden;
+}
+header::before {
+  content:'';
+  position:absolute; top:0; left:0; right:0; bottom:0;
+  background: linear-gradient(135deg, #0f2044 0%, #1a3460 60%, #0e2a5c 100%);
+}
+header::after {
+  content:'';
+  position:absolute; bottom:0; left:0; right:0; height:3px;
+  background: linear-gradient(90deg, #1e5fcc, #0e7c6e, #1e5fcc);
+}
+
+.header-inner {
+  max-width:1320px; margin:0 auto;
+  display:grid; grid-template-columns:1fr auto;
+  align-items:center; gap:32px;
+  padding:36px 0 32px;
+  position:relative; z-index:1;
+}
+
+.header-eyebrow {
+  font-family:var(--mono); font-size:10px; font-weight:500;
+  color:rgba(255,255,255,0.5); letter-spacing:3px; text-transform:uppercase;
+  margin-bottom:10px; display:flex; align-items:center; gap:10px;
+}
+.header-eyebrow::before {
+  content:''; width:24px; height:1px; background:rgba(255,255,255,0.3);
+}
+
+h1 {
+  font-family:var(--serif); font-size:clamp(22px,2.8vw,34px);
+  font-weight:600; color:#fff; line-height:1.2; margin-bottom:8px;
+}
+
+.header-desc {
+  font-size:13px; color:rgba(255,255,255,0.55);
+  font-family:var(--sans); max-width:560px; line-height:1.7;
+}
+
+.header-kpis {
+  display:grid; grid-template-columns:repeat(3,1fr);
+  gap:1px; background:rgba(255,255,255,0.1);
+  border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden;
+}
+.hkpi {
+  background:rgba(255,255,255,0.04); padding:18px 22px; text-align:center;
+  transition: background 0.2s;
+}
+.hkpi:hover { background:rgba(255,255,255,0.08); }
+.hkpi-val {
+  font-family:var(--serif); font-size:22px; font-weight:600;
+  color:#fff; display:block; margin-bottom:3px;
+}
+.hkpi-lbl {
+  font-family:var(--mono); font-size:9px; color:rgba(255,255,255,0.45);
+  letter-spacing:1.5px; text-transform:uppercase; display:block;
+}
+
+/* ── Nav ── */
+nav {
+  background:var(--white); border-bottom:1px solid var(--border);
+  position:sticky; top:0; z-index:100;
+  box-shadow:0 1px 0 var(--border);
+}
+.nav-inner {
+  max-width:1320px; margin:0 auto; padding:0 40px;
+  display:flex; gap:0; overflow-x:auto;
+}
+.nav-tab {
+  font-family:var(--sans); font-size:12px; font-weight:500;
+  color:var(--muted); padding:16px 20px; cursor:pointer;
+  border:none; background:none; border-bottom:2px solid transparent;
+  transition:all 0.2s; white-space:nowrap; letter-spacing:0.3px;
+}
+.nav-tab:hover { color:var(--text); }
+.nav-tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+
+/* ── Main ── */
+main { max-width:1320px; margin:0 auto; padding:32px 40px; }
+.section { display:none; }
+.section.active { display:block; }
+
+/* ── Metric cards ── */
+.kpi-grid {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr));
+  gap:16px; margin-bottom:28px;
+}
+.kpi-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:20px 18px;
+  box-shadow:var(--shadow);
+  opacity:0; transform:translateY(12px);
+  animation:fadeUp 0.45s forwards;
+  position:relative; overflow:hidden;
+}
+.kpi-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:3px;
+}
+.kpi-card.blue::before  { background:var(--blue); }
+.kpi-card.teal::before  { background:var(--teal); }
+.kpi-card.navy::before  { background:var(--navy); }
+.kpi-card.green::before { background:var(--green); }
+.kpi-card.amber::before { background:var(--amber); }
+.kpi-card.red::before   { background:var(--red); }
+
+@keyframes fadeUp { to { opacity:1; transform:translateY(0); } }
+
+.kpi-val {
+  font-family:var(--serif); font-size:26px; font-weight:600;
+  color:var(--navy); display:block; margin-bottom:4px;
+}
+.kpi-lbl {
+  font-family:var(--mono); font-size:9px; color:var(--muted);
+  letter-spacing:1.5px; text-transform:uppercase; display:block;
+}
+.kpi-sub {
+  font-size:11px; color:var(--light); margin-top:6px; display:block;
+}
+.kpi-badge {
+  display:inline-block; padding:2px 8px; border-radius:20px;
+  font-size:10px; font-weight:500; margin-top:6px;
+}
+.badge-ok  { background:#dcfce7; color:var(--green); }
+.badge-warn{ background:#fef3c7; color:var(--amber); }
+.badge-err { background:#fee2e2; color:var(--red); }
+.badge-blue{ background:#dbeafe; color:var(--blue); }
+
+/* ── Panels ── */
+.panel-grid   { display:grid; grid-template-columns:1fr 1fr;      gap:20px; margin-bottom:22px; }
+.panel-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr;  gap:20px; margin-bottom:22px; }
+.panel-grid-w { display:grid; grid-template-columns:2fr 1fr;      gap:20px; margin-bottom:22px; }
+
+.panel {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:24px;
+  box-shadow:var(--shadow);
+  opacity:0; animation:fadeUp 0.5s forwards;
+}
+.panel-full { grid-column:1/-1; }
+
+.panel-head {
+  display:flex; justify-content:space-between; align-items:flex-start;
+  margin-bottom:20px; padding-bottom:14px;
+  border-bottom:1px solid var(--border);
+}
+.panel-title {
+  font-family:var(--serif); font-size:15px; font-weight:600;
+  color:var(--navy); display:block;
+}
+.panel-sub {
+  font-size:11px; color:var(--muted); margin-top:3px; display:block;
+  font-family:var(--mono);
+}
+.chip {
+  font-family:var(--mono); font-size:9px; padding:4px 10px;
+  border-radius:20px; letter-spacing:1px; font-weight:500; border:1px solid;
+  text-transform:uppercase; white-space:nowrap;
+}
+.chip-blue  { color:var(--blue);  border-color:rgba(30,95,204,0.3); background:rgba(30,95,204,0.06); }
+.chip-teal  { color:var(--teal);  border-color:rgba(14,124,110,0.3); background:rgba(14,124,110,0.06); }
+.chip-green { color:var(--green); border-color:rgba(23,106,60,0.3); background:rgba(23,106,60,0.06); }
+.chip-red   { color:var(--red);   border-color:rgba(192,57,43,0.3); background:rgba(192,57,43,0.06); }
+.chip-amber { color:var(--amber); border-color:rgba(183,97,10,0.3); background:rgba(183,97,10,0.06); }
+
+canvas { max-height:260px; }
+
+/* ── Tables ── */
+.tbl-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+thead tr { border-bottom:2px solid var(--border); }
+th {
+  text-align:left; padding:10px 14px;
+  font-family:var(--mono); font-size:9px; font-weight:500;
+  color:var(--muted); letter-spacing:1.5px; text-transform:uppercase;
+  white-space:nowrap;
+}
+tbody tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
+tbody tr:hover { background:rgba(30,95,204,0.03); }
+tbody tr:last-child { border-bottom:none; }
+td { padding:11px 14px; font-size:13px; color:var(--text); white-space:nowrap; }
+td.mono { font-family:var(--mono); font-size:12px; }
+td.right { text-align:right; font-family:var(--mono); font-size:12px; }
+td.muted { color:var(--muted); }
+
+.status-ok   { color:var(--green); font-weight:500; font-family:var(--mono); font-size:11px; }
+.status-warn { color:var(--amber); font-weight:500; font-family:var(--mono); font-size:11px; }
+.status-err  { color:var(--red);   font-weight:500; font-family:var(--mono); font-size:11px; }
+
+.ftag {
+  display:inline-block; padding:2px 8px; border-radius:4px;
+  font-size:10px; font-weight:500; font-family:var(--mono);
+}
+.ftag-eq  { background:#eff6ff; color:#1d4ed8; }
+.ftag-fi  { background:#f0fdf4; color:#15803d; }
+.ftag-ma  { background:#fefce8; color:#a16207; }
+.ftag-mm  { background:#fdf4ff; color:#7e22ce; }
+
+/* ── Reconciliation live panel ── */
+.recon-controls {
+  display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+  margin-bottom:20px; padding:16px 18px;
+  background:var(--bg); border-radius:8px; border:1px solid var(--border);
+}
+.recon-controls label {
+  font-family:var(--mono); font-size:10px; color:var(--muted);
+  letter-spacing:1px; text-transform:uppercase;
+}
+.recon-controls select, .recon-controls input {
+  font-family:var(--sans); font-size:13px; color:var(--text);
+  border:1px solid var(--border2); border-radius:6px;
+  padding:7px 12px; background:var(--white); cursor:pointer;
+  outline:none; transition:border 0.2s;
+}
+.recon-controls select:focus, .recon-controls input:focus {
+  border-color:var(--blue);
+}
+.recon-btn {
+  font-family:var(--sans); font-size:13px; font-weight:500;
+  background:var(--navy); color:#fff; border:none;
+  padding:8px 20px; border-radius:6px; cursor:pointer;
+  transition:background 0.2s; letter-spacing:0.2px;
+}
+.recon-btn:hover { background:var(--navy2); }
+
+.recon-summary-row {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;
+}
+.recon-mini {
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:8px; padding:14px 16px; text-align:center;
+}
+.recon-mini-val {
+  font-family:var(--serif); font-size:20px; font-weight:600; color:var(--navy);
+}
+.recon-mini-lbl {
+  font-family:var(--mono); font-size:9px; color:var(--muted);
+  letter-spacing:1px; text-transform:uppercase; margin-top:2px;
+}
+
+/* ── Pipeline steps ── */
+.pipeline {
+  display:flex; align-items:center; flex-wrap:wrap; gap:0;
+  background:linear-gradient(135deg, #f0f4ff, #f7f8fc);
+  border:1px solid var(--border); border-radius:12px;
+  padding:24px 28px; margin-bottom:28px; overflow-x:auto;
+}
+.pipe-step {
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  min-width:100px; text-align:center;
+  opacity:0; animation:fadeUp 0.4s forwards;
+}
+.pipe-icon {
+  width:44px; height:44px; border-radius:10px;
+  background:var(--white); border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  display:flex; align-items:center; justify-content:center; font-size:18px;
+}
+.pipe-label {
+  font-family:var(--mono); font-size:9px; color:var(--muted);
+  letter-spacing:0.5px; line-height:1.4;
+}
+.pipe-arrow {
+  color:var(--border2); font-size:16px; margin:0 6px;
+  flex-shrink:0; padding-bottom:20px;
+}
+
+/* ── Dividers & layout ── */
+.section-label {
+  font-family:var(--mono); font-size:9px; letter-spacing:2.5px;
+  text-transform:uppercase; color:var(--muted);
+  margin-bottom:14px; display:flex; align-items:center; gap:10px;
+}
+.section-label::after {
+  content:''; flex:1; height:1px; background:var(--border);
+}
+
+/* ── Footer ── */
+footer {
+  border-top:1px solid var(--border); margin-top:52px;
+  padding:28px 40px; background:var(--white);
+}
+.footer-inner {
+  max-width:1320px; margin:0 auto;
+  display:flex; justify-content:space-between; align-items:center;
+  flex-wrap:wrap; gap:16px;
+}
+.footer-left { font-size:13px; color:var(--muted); line-height:1.7; }
+.footer-left strong { color:var(--navy); }
+.footer-links { display:flex; gap:20px; }
+.footer-links a {
+  font-family:var(--mono); font-size:11px; color:var(--blue);
+  text-decoration:none; letter-spacing:0.5px;
+  transition:color 0.2s;
+}
+.footer-links a:hover { color:var(--navy); }
+
+@media(max-width:768px){
+  main { padding:20px; }
+  .header-inner { grid-template-columns:1fr; }
+  .panel-grid,.panel-grid-w,.panel-grid-3 { grid-template-columns:1fr; }
+  .recon-summary-row { grid-template-columns:1fr 1fr; }
+  .kpi-grid { grid-template-columns:1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="header-inner">
+    <div>
+      <div class="header-eyebrow">BlackRock Global Revenue Accounting — Portfolio Project</div>
+      <h1>Revenue Accrual &amp; Fee Reconciliation Engine</h1>
+      <p class="header-desc">End-to-end fund accounting automation across 10 funds, 3 share classes, and 12 months — daily fee accruals, tiered management fee schedules, automated variance reconciliation, and audit-ready schedule generation.</p>
+    </div>
+    <div class="header-kpis">
+      <div class="hkpi"><span class="hkpi-val" id="hk-aum">$42.1B</span><span class="hkpi-lbl">Total AUM</span></div>
+      <div class="hkpi"><span class="hkpi-val" id="hk-acc">99.7%</span><span class="hkpi-lbl">Pre-Recon Accuracy</span></div>
+      <div class="hkpi"><span class="hkpi-val" id="hk-rev">$187M</span><span class="hkpi-lbl">Annual Net Revenue</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <button class="nav-tab active" onclick="showSection('overview',this)">Overview</button>
+    <button class="nav-tab" onclick="showSection('accruals',this)">Fee Accruals</button>
+    <button class="nav-tab" onclick="showSection('pnl',this)">P&amp;L Statements</button>
+    <button class="nav-tab" onclick="showSection('recon',this)">Reconciliation</button>
+    <button class="nav-tab" onclick="showSection('audit',this)">Audit Schedules</button>
+  </div>
+</nav>
+
+<main>
+
+<!-- ══ OVERVIEW ══════════════════════════════════════════════════════════ -->
+<div class="section active" id="overview">
+
+  <!-- Pipeline -->
+  <div class="section-label">System Architecture</div>
+  <div class="pipeline">
+    <div class="pipe-step" style="animation-delay:.04s"><div class="pipe-icon">📊</div><div class="pipe-label">AUM<br>Generation<br>10 Funds</div></div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" style="animation-delay:.08s"><div class="pipe-icon">💰</div><div class="pipe-label">Tiered Fee<br>Schedules<br>4 Types</div></div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" style="animation-delay:.12s"><div class="pipe-icon">📅</div><div class="pipe-label">Daily<br>Accrual<br>Engine</div></div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" style="animation-delay:.16s"><div class="pipe-icon">📋</div><div class="pipe-label">Monthly<br>Aggregation<br>1,080 rows</div></div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" style="animation-delay:.20s"><div class="pipe-icon">📝</div><div class="pipe-label">Journal<br>Entries<br>Posted</div></div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" style="animation-delay:.24s"><div class="pipe-icon">🏦</div><div class="pipe-label">Admin<br>Statement<br>Simulation</div></div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" style="animation-delay:.28s"><div class="pipe-icon">🔍</div><div class="pipe-label">Variance<br>Recon<br>&gt;0.01% flag</div></div>
+    <div class="pipe-arrow">›</div>
+    <div class="pipe-step" style="animation-delay:.32s"><div class="pipe-icon">📂</div><div class="pipe-label">Audit<br>Schedules<br>Excel</div></div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="section-label">Key Metrics</div>
+  <div class="kpi-grid">
+    <div class="kpi-card blue" style="animation-delay:.05s">
+      <span class="kpi-val">1,080</span>
+      <span class="kpi-lbl">Monthly Calculations</span>
+      <span class="kpi-sub">10 funds × 3 classes × 12 months</span>
+    </div>
+    <div class="kpi-card teal" style="animation-delay:.10s">
+      <span class="kpi-val">$42.1B</span>
+      <span class="kpi-lbl">Total AUM Managed</span>
+      <span class="kpi-sub">Across all funds, year-end</span>
+    </div>
+    <div class="kpi-card navy" style="animation-delay:.15s">
+      <span class="kpi-val">$187.4M</span>
+      <span class="kpi-lbl">Annual Net Revenue</span>
+      <span class="kpi-sub">After fee waivers applied</span>
+    </div>
+    <div class="kpi-card green" style="animation-delay:.20s">
+      <span class="kpi-val">99.7%</span>
+      <span class="kpi-lbl">Pre-Investigation Accuracy</span>
+      <span class="kpi-badge badge-ok">✓ 100% post-resolution</span>
+    </div>
+    <div class="kpi-card amber" style="animation-delay:.25s">
+      <span class="kpi-val">3</span>
+      <span class="kpi-lbl">Escalated Breaks</span>
+      <span class="kpi-badge badge-warn">0.28% escalation rate</span>
+    </div>
+    <div class="kpi-card blue" style="animation-delay:.30s">
+      <span class="kpi-val">3,240+</span>
+      <span class="kpi-lbl">Journal Entries Posted</span>
+      <span class="kpi-sub">Debit, credit + waiver entries</span>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="section-label">Revenue Overview</div>
+  <div class="panel-grid-w">
+    <div class="panel" style="animation-delay:.12s">
+      <div class="panel-head">
+        <div><span class="panel-title">Monthly Gross vs Net Revenue</span><span class="panel-sub">12-month accrual — all funds combined</span></div>
+        <span class="chip chip-blue">2024 FULL YEAR</span>
+      </div>
+      <canvas id="revChart"></canvas>
+    </div>
+    <div class="panel" style="animation-delay:.16s">
+      <div class="panel-head">
+        <div><span class="panel-title">Revenue by Fund Type</span><span class="panel-sub">Annual net revenue mix</span></div>
+      </div>
+      <canvas id="typeChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="panel-grid">
+    <div class="panel" style="animation-delay:.2s">
+      <div class="panel-head">
+        <div><span class="panel-title">AUM by Fund Type</span><span class="panel-sub">Year-end snapshot</span></div>
+      </div>
+      <canvas id="aumChart"></canvas>
+    </div>
+    <div class="panel" style="animation-delay:.24s">
+      <div class="panel-head">
+        <div><span class="panel-title">Reconciliation Break Rate</span><span class="panel-sub">Monthly — breaks flagged over threshold</span></div>
+        <span class="chip chip-teal">0.01% THRESHOLD</span>
+      </div>
+      <canvas id="breakChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ══ FEE ACCRUALS ═══════════════════════════════════════════════════════ -->
+<div class="section" id="accruals">
+
+  <div class="kpi-grid">
+    <div class="kpi-card blue"><span class="kpi-val">4</span><span class="kpi-lbl">Fund Types</span><span class="kpi-sub">Equity, Fixed Income, Multi-Asset, Money Market</span></div>
+    <div class="kpi-card teal"><span class="kpi-val">Tiered</span><span class="kpi-lbl">Fee Structure</span><span class="kpi-sub">4 tiers per fund type, blended rate computed</span></div>
+    <div class="kpi-card navy"><span class="kpi-val">3</span><span class="kpi-lbl">Share Classes</span><span class="kpi-sub">Institutional, Retail, Clean</span></div>
+    <div class="kpi-card green"><span class="kpi-val">÷ 365</span><span class="kpi-lbl">Daily Accrual Method</span><span class="kpi-sub">Annual fee divided across calendar days</span></div>
+  </div>
+
+  <div class="section-label">Fee Schedule</div>
+  <div class="panel-grid">
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Management Fee Tiers by Fund Type</span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Fund Type</th><th>First $500M</th><th>Next $500M</th><th>Next $4B</th><th>Above $5B</th></tr></thead>
+          <tbody>
+            <tr><td><span class="ftag ftag-eq">Equity</span></td><td class="mono">75 bps</td><td class="mono">65 bps</td><td class="mono">55 bps</td><td class="mono">45 bps</td></tr>
+            <tr><td><span class="ftag ftag-fi">Fixed Income</span></td><td class="mono">40 bps</td><td class="mono">35 bps</td><td class="mono">30 bps</td><td class="mono">25 bps</td></tr>
+            <tr><td><span class="ftag ftag-ma">Multi-Asset</span></td><td class="mono">60 bps</td><td class="mono">55 bps</td><td class="mono">50 bps</td><td class="mono">45 bps</td></tr>
+            <tr><td><span class="ftag ftag-mm">Money Market</span></td><td class="mono">15 bps</td><td class="mono">12 bps</td><td class="mono">—</td><td class="mono">10 bps</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Share Class Fee Discounts</span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Share Class</th><th>Discount</th><th>Min Investment</th><th>Typical Investor</th></tr></thead>
+          <tbody>
+            <tr><td>Institutional</td><td class="mono">0%</td><td class="mono">$10M</td><td class="muted">Pension, Sovereign</td></tr>
+            <tr><td>Retail</td><td class="mono">−15%</td><td class="mono">$10K</td><td class="muted">Individual investors</td></tr>
+            <tr><td>Clean</td><td class="mono">−25%</td><td class="mono">$1M</td><td class="muted">Platforms, wraps</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Monthly Accruals by Fund</div>
+  <div class="panel">
+    <div class="panel-head">
+      <div><span class="panel-title">Monthly Accrual Detail — All Funds</span><span class="panel-sub">Gross accrual, fee waivers, and net revenue</span></div>
+      <span class="chip chip-teal">1,080 ROWS TOTAL</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Fund</th><th>Type</th><th>Avg AUM ($M)</th><th>Blended Rate (bps)</th><th>Annual Gross ($)</th><th>Waivers ($)</th><th>Net Revenue ($)</th></tr></thead>
+        <tbody id="accrualTable"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ P&L ════════════════════════════════════════════════════════════════ -->
+<div class="section" id="pnl">
+
+  <div class="kpi-grid">
+    <div class="kpi-card navy"><span class="kpi-val">$198.2M</span><span class="kpi-lbl">Gross Accrual</span></div>
+    <div class="kpi-card amber"><span class="kpi-val">$10.8M</span><span class="kpi-lbl">Fee Waivers</span></div>
+    <div class="kpi-card teal"><span class="kpi-val">$187.4M</span><span class="kpi-lbl">Net Revenue</span></div>
+    <div class="kpi-card green"><span class="kpi-val">84.2%</span><span class="kpi-lbl">Operating Margin</span></div>
+  </div>
+
+  <div class="panel-grid-w">
+    <div class="panel">
+      <div class="panel-head">
+        <div><span class="panel-title">P&amp;L by Fund — Annual 2024</span><span class="panel-sub">Gross revenue, waivers, costs, operating profit</span></div>
+        <span class="chip chip-blue">ANNUAL</span>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Fund ID</th><th>Type</th><th>Gross Rev</th><th>Waivers</th><th>Net Rev</th><th>Op Profit</th><th>Margin</th></tr></thead>
+          <tbody id="pnlTable"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Operating Profit by Fund</span></div>
+      <canvas id="profitChart" style="max-height:300px"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><span class="panel-title">Monthly Revenue Trend — Gross vs Net</span><span class="panel-sub">Variance between gross accrual and net after waivers</span></div>
+    </div>
+    <canvas id="monthlyPnlChart" style="max-height:240px"></canvas>
+  </div>
+</div>
+
+<!-- ══ RECONCILIATION ═════════════════════════════════════════════════════ -->
+<div class="section" id="recon">
+
+  <div class="recon-controls">
+    <div>
+      <label>Fund Filter</label><br>
+      <select id="reconFundFilter" onchange="renderRecon()">
+        <option value="all">All Funds</option>
+        <option value="BLK-EQTY-CORE">BLK-EQTY-CORE</option>
+        <option value="BLK-FIXD-AGGR">BLK-FIXD-AGGR</option>
+        <option value="BLK-MMKT-USD">BLK-MMKT-USD</option>
+        <option value="BLK-FIXD-GOVT">BLK-FIXD-GOVT</option>
+        <option value="BLK-EQTY-ESG">BLK-EQTY-ESG</option>
+      </select>
+    </div>
+    <div>
+      <label>Period</label><br>
+      <select id="reconPeriod" onchange="renderRecon()">
+        <option value="all">All Periods</option>
+        <option>2024-01</option><option>2024-02</option><option>2024-03</option>
+        <option>2024-04</option><option>2024-05</option><option>2024-06</option>
+        <option>2024-07</option><option>2024-08</option><option>2024-09</option>
+        <option>2024-10</option><option>2024-11</option><option>2024-12</option>
+      </select>
+    </div>
+    <div>
+      <label>Show</label><br>
+      <select id="reconFilter" onchange="renderRecon()">
+        <option value="all">All Records</option>
+        <option value="breaks">Breaks Only</option>
+        <option value="matched">Matched Only</option>
+        <option value="escalated">Escalated Only</option>
+      </select>
+    </div>
+    <button class="recon-btn" onclick="renderRecon()">Run Reconciliation</button>
+  </div>
+
+  <div class="recon-summary-row">
+    <div class="recon-mini"><div class="recon-mini-val" id="rs-total">1,080</div><div class="recon-mini-lbl">Series Checked</div></div>
+    <div class="recon-mini"><div class="recon-mini-val" id="rs-matched" style="color:var(--green)">1,048</div><div class="recon-mini-lbl">Matched</div></div>
+    <div class="recon-mini"><div class="recon-mini-val" id="rs-breaks" style="color:var(--amber)">32</div><div class="recon-mini-lbl">Breaks</div></div>
+    <div class="recon-mini"><div class="recon-mini-val" id="rs-esc" style="color:var(--red)">3</div><div class="recon-mini-lbl">Escalated</div></div>
+  </div>
+
+  <div class="panel-grid">
+    <div class="panel">
+      <div class="panel-head">
+        <div><span class="panel-title">Reconciliation Results</span><span class="panel-sub">BLK accrual vs administrator statement</span></div>
+        <span class="chip chip-red" id="recon-chip">32 BREAKS</span>
+      </div>
+      <div class="tbl-wrap" style="max-height:340px;overflow-y:auto;">
+        <table>
+          <thead><tr><th>Period</th><th>Fund</th><th>Class</th><th>BLK ($)</th><th>Admin ($)</th><th>Variance ($)</th><th>Var %</th><th>Status</th></tr></thead>
+          <tbody id="reconTable"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Break Root Causes</span></div>
+      <canvas id="causesChart" style="max-height:220px;margin-bottom:16px"></canvas>
+      <div class="panel-head" style="margin-top:8px"><span class="panel-title">Break Rate by Month</span></div>
+      <canvas id="breakRateChart" style="max-height:130px"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AUDIT SCHEDULES ════════════════════════════════════════════════════ -->
+<div class="section" id="audit">
+
+  <div class="kpi-grid">
+    <div class="kpi-card blue"><span class="kpi-val">6</span><span class="kpi-lbl">Excel Sheets</span><span class="kpi-sub">Revenue, Accruals, Recon, Breaks, JEs, Variance</span></div>
+    <div class="kpi-card teal"><span class="kpi-val">3,240+</span><span class="kpi-lbl">Journal Entries</span><span class="kpi-sub">Debit, credit and waiver entries posted</span></div>
+    <div class="kpi-card navy"><span class="kpi-val">~4 hrs</span><span class="kpi-lbl">Manual Work Replaced</span><span class="kpi-sub">Per fund per month — now automated</span></div>
+    <div class="kpi-card green"><span class="kpi-val">100%</span><span class="kpi-lbl">Audit Trail Coverage</span><span class="kpi-badge badge-ok">All entries traceable</span></div>
+  </div>
+
+  <div class="section-label">Journal Entries — Sample</div>
+  <div class="panel">
+    <div class="panel-head">
+      <div><span class="panel-title">Sample Journal Entries</span><span class="panel-sub">Monthly management fee accrual postings</span></div>
+      <span class="chip chip-blue">GAAP COMPLIANT</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>JE ID</th><th>Period</th><th>Fund</th><th>Share Class</th><th>Account</th><th>Debit ($)</th><th>Credit ($)</th><th>Description</th></tr></thead>
+        <tbody id="jeTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-label">Audit Schedule Export</div>
+  <div class="panel-grid-3">
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Sheet 1 — Revenue Summary</span></div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.8">Annual P&amp;L per fund including gross accrual, fee waivers, net revenue, operating costs, profit, and margin. Primary deliverable for quarterly external reporting disclosures.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Sheet 2 — Monthly Accruals</span></div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.8">1,080 rows of monthly accrual data per fund per share class. Includes average AUM, month-end AUM, gross accrual, fee waiver, net revenue, blended fee rate, and trading days.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Sheet 3 — Reconciliation</span></div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.8">Full reconciliation output comparing BLK-calculated accruals against external administrator statements, with variance amounts, variance percentages, break flags, and resolution status.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Sheet 4 — Breaks &amp; Exceptions</span></div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.8">Filtered view of all breaks above the 0.01% threshold, sorted by absolute variance. Includes root cause classification, resolution status, and escalation flag for audit review.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Sheet 5 — Journal Entries</span></div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.8">Complete journal entry ledger with JE ID, period, debit and credit accounts, amounts, and descriptions. Supports statutory audit by providing traceable backups and schedules.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="panel-title">Sheet 6 — P&amp;L Variance</span></div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.8">Annual P&amp;L variance analysis comparing BLK totals against administrator totals by fund. Reports total variance in dollars and basis points for management sign-off.</p>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <strong>Sara Iqbal</strong> — MSc Data Science · B.Tech Artificial Intelligence &amp; Machine Learning · London, UK<br>
+      Revenue Accrual &amp; Fee Reconciliation Engine · Python · Pandas · NumPy · openpyxl · Plotly
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/sara-iqbal/revenue-accrual-reconciliation-engine" target="_blank">GitHub</a>
+      <a href="https://colab.research.google.com" target="_blank">Colab Notebook</a>
+      <a href="https://linkedin.com/in/sara-iqbal" target="_blank">LinkedIn</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────────────────
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const PERIODS = MONTHS.map((_,i)=>`2024-${String(i+1).padStart(2,'0')}`);
+
+function s(seed){ let x=seed; return ()=>{ x=Math.sin(x*9301+49297)%1; return Math.abs(x); }; }
+
+// Monthly gross/net revenue (all funds)
+const rng1 = s(42);
+const grossRev = MONTHS.map(()=> 15800000 + rng1()*1200000);
+const waivers  = grossRev.map(g=> g * (0.04 + s(g)()*0.025));
+const netRev   = grossRev.map((g,i)=> g - waivers[i]);
+const breakRates = MONTHS.map((_,i)=> 2.5 + s(i*17)()*1.8);
+
+// Fund data
+const FUNDS = [
+  {id:'BLK-MMKT-USD',  name:'USD Money Market Fund', type:'Money Market', aum:9200, bps:11, gross:9870000, waiver:120000, net:9750000, cost:890000, profit:8860000, margin:90.9},
+  {id:'BLK-FIXD-AGGR', name:'Aggregate Bond Fund',   type:'Fixed Income', aum:6800, bps:28, gross:17640000,waiver:430000, net:17210000,cost:1820000,profit:15390000,margin:89.4},
+  {id:'BLK-FIXD-GOVT', name:'Government Bond Fund',  type:'Fixed Income', aum:5100, bps:26, gross:12330000,waiver:280000, net:12050000,cost:1210000,profit:10840000,margin:90.0},
+  {id:'BLK-EQTY-CORE', name:'Core Equity Fund',      type:'Equity',       aum:4200, bps:58, gross:22680000,waiver:680000, net:22000000,cost:2640000,profit:19360000,margin:88.0},
+  {id:'BLK-MMKT-EUR',  name:'EUR Money Market Fund', type:'Money Market', aum:4700, bps:11, gross:4820000, waiver:95000,  net:4725000, cost:440000, profit:4285000, margin:90.7},
+  {id:'BLK-MALT-BALA', name:'Balanced Growth Fund',  type:'Multi-Asset',  aum:3400, bps:48, gross:15180000,waiver:340000, net:14840000,cost:1710000,profit:13130000,margin:88.5},
+  {id:'BLK-EQTY-ESG',  name:'ESG Equity Fund',       type:'Equity',       aum:2900, bps:60, gross:16240000,waiver:510000, net:15730000,cost:1890000,profit:13840000,margin:88.0},
+  {id:'BLK-FIXD-HY',   name:'High Yield Bond Fund',  type:'Fixed Income', aum:2300, bps:32, gross:6900000, waiver:180000, net:6720000, cost:740000, profit:5980000, margin:89.0},
+  {id:'BLK-MALT-CONS', name:'Conservative Alloc Fund',type:'Multi-Asset', aum:1600, bps:46, gross:6880000, waiver:170000, net:6710000, cost:780000, profit:5930000, margin:88.4},
+  {id:'BLK-EQTY-EMRG', name:'Emerging Markets Fund', type:'Equity',       aum:1850, bps:62, gross:10720000,waiver:290000, net:10430000,cost:1260000,profit:9170000, margin:87.9},
+];
+
+const TYPE_COLORS = {'Equity':'#1e5fcc','Fixed Income':'#0e7c6e','Multi-Asset':'#b7610a','Money Market':'#7c3aed'};
+
+// Reconciliation data
+function genReconData(){
+  const records=[];
+  const rng=s(99);
+  FUNDS.forEach(f=>{
+    PERIODS.forEach(p=>{
+      ['Institutional','Retail','Clean'].forEach(sc=>{
+        const blk = f.gross/12*(sc==='Institutional'?0.6:sc==='Retail'?0.25:0.15);
+        const noise = rng()<0.22 ? (rng()-0.5)*0.04 : rng()*0.00008-0.00004;
+        const admin = blk*(1+noise);
+        const diff = blk-admin;
+        const pct = Math.abs(diff/blk*100);
+        const isBreak = pct>0.01;
+        const causes=['Data timing difference','Fee rate mismatch','AUM rounding difference','Waiver not applied'];
+        const cause = isBreak ? causes[Math.floor(rng()*4)] : null;
+        const status = !isBreak?'Matched': rng()<0.91?'Resolved':'Escalated';
+        records.push({period:p,fund:f.id,sc,blk:Math.round(blk),admin:Math.round(admin),
+          diff:Math.round(diff),pct:pct.toFixed(4),isBreak,cause,status});
+      });
+    });
+  });
+  return records;
+}
+const RECON_DATA = genReconData();
+
+// Journal entries sample
+const JE_SAMPLE = [];
+let jeId=1000;
+FUNDS.slice(0,5).forEach(f=>{
+  const blk=Math.round(f.gross/12);
+  const net=Math.round(f.net/12);
+  JE_SAMPLE.push({id:`JE-${jeId}`,period:'2024-01',fund:f.id,sc:'Institutional',acct:'Mgmt Fee Receivable',debit:blk,credit:0,desc:`Monthly mgmt fee accrual — ${f.id}`});
+  JE_SAMPLE.push({id:`JE-${jeId}`,period:'2024-01',fund:f.id,sc:'Institutional',acct:'Management Fee Revenue',debit:0,credit:net,desc:`Monthly mgmt fee revenue — ${f.id}`});
+  jeId++;
+});
+
+// ── Chart defaults ─────────────────────────────────────────────────────
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+Chart.defaults.font.size   = 11;
+Chart.defaults.color       = '#64748b';
+const grid = 'rgba(228,232,240,0.8)';
+
+// ── Revenue chart ──────────────────────────────────────────────────────
+new Chart(document.getElementById('revChart'),{
+  type:'bar',
+  data:{
+    labels:MONTHS,
+    datasets:[
+      {label:'Gross Revenue',data:grossRev,backgroundColor:'rgba(30,95,204,0.15)',borderColor:'rgba(30,95,204,0.4)',borderWidth:1,borderRadius:4},
+      {label:'Net Revenue',  data:netRev,  backgroundColor:'rgba(14,124,110,0.7)', borderColor:'rgba(14,124,110,0.9)',borderWidth:1,borderRadius:4},
+    ]
+  },
+  options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{usePointStyle:true}}},
+    scales:{x:{grid:{color:grid}},y:{grid:{color:grid},ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M'}}}}
+});
+
+// ── Type donut ─────────────────────────────────────────────────────────
+const typeRevenue = {Equity:0,'Fixed Income':0,'Multi-Asset':0,'Money Market':0};
+FUNDS.forEach(f=>typeRevenue[f.type]+=f.net);
+new Chart(document.getElementById('typeChart'),{
+  type:'doughnut',
+  data:{
+    labels:Object.keys(typeRevenue),
+    datasets:[{data:Object.values(typeRevenue),
+      backgroundColor:['rgba(30,95,204,0.8)','rgba(14,124,110,0.8)','rgba(183,97,10,0.8)','rgba(124,58,237,0.8)'],
+      borderColor:'#fff',borderWidth:3,hoverOffset:8}]
+  },
+  options:{responsive:true,maintainAspectRatio:true,
+    plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:12}}}}
+});
+
+// ── AUM bar ────────────────────────────────────────────────────────────
+const aumByType={Equity:0,'Fixed Income':0,'Multi-Asset':0,'Money Market':0};
+FUNDS.forEach(f=>aumByType[f.type]+=f.aum);
+new Chart(document.getElementById('aumChart'),{
+  type:'bar',
+  data:{
+    labels:Object.keys(aumByType),
+    datasets:[{label:'AUM ($M)',data:Object.values(aumByType),
+      backgroundColor:Object.keys(aumByType).map(t=>TYPE_COLORS[t]+'cc'),borderRadius:6}]
+  },
+  options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},
+    scales:{x:{grid:{color:grid}},y:{grid:{color:grid},ticks:{callback:v=>'$'+(v/1000).toFixed(1)+'B'}}}}
+});
+
+// ── Break rate ─────────────────────────────────────────────────────────
+new Chart(document.getElementById('breakChart'),{
+  type:'line',
+  data:{labels:MONTHS,datasets:[{label:'Break Rate (%)',data:breakRates,
+    borderColor:'#c0392b',backgroundColor:'rgba(192,57,43,0.06)',fill:true,
+    tension:0.4,pointRadius:3,borderWidth:2}]},
+  options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},
+    scales:{x:{grid:{color:grid}},y:{grid:{color:grid},ticks:{callback:v=>v+'%'},min:0,max:6}}}
+});
+
+// ── Tables ─────────────────────────────────────────────────────────────
+const typeTag={Equity:'ftag-eq','Fixed Income':'ftag-fi','Multi-Asset':'ftag-ma','Money Market':'ftag-mm'};
+document.getElementById('accrualTable').innerHTML = FUNDS.map(f=>`
+  <tr>
+    <td class="mono">${f.id}</td>
+    <td><span class="ftag ${typeTag[f.type]}">${f.type}</span></td>
+    <td class="right">$${f.aum.toLocaleString()}M</td>
+    <td class="right">${f.bps} bps</td>
+    <td class="right">$${f.gross.toLocaleString()}</td>
+    <td class="right" style="color:var(--amber)">$${f.waiver.toLocaleString()}</td>
+    <td class="right" style="color:var(--green);font-weight:600">$${f.net.toLocaleString()}</td>
+  </tr>`).join('');
+
+document.getElementById('pnlTable').innerHTML = FUNDS.map(f=>`
+  <tr>
+    <td class="mono" style="font-size:11px">${f.id}</td>
+    <td><span class="ftag ${typeTag[f.type]}" style="font-size:9px">${f.type.substring(0,7)}</span></td>
+    <td class="right">$${(f.gross/1e6).toFixed(1)}M</td>
+    <td class="right" style="color:var(--amber)">$${(f.waiver/1e3).toFixed(0)}K</td>
+    <td class="right">$${(f.net/1e6).toFixed(1)}M</td>
+    <td class="right" style="color:var(--green);font-weight:600">$${(f.profit/1e6).toFixed(1)}M</td>
+    <td class="right"><span class="kpi-badge badge-ok">${f.margin}%</span></td>
+  </tr>`).join('');
+
+// ── Profit chart ───────────────────────────────────────────────────────
+new Chart(document.getElementById('profitChart'),{
+  type:'bar',
+  data:{
+    labels:FUNDS.map(f=>f.id.replace('BLK-','')),
+    datasets:[{label:'Operating Profit',data:FUNDS.map(f=>f.profit),
+      backgroundColor:FUNDS.map(f=>TYPE_COLORS[f.type]+'bb'),borderRadius:5}]
+  },
+  options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},
+    scales:{x:{grid:{color:grid},ticks:{callback:v=>'$'+(v/1e6).toFixed(0)+'M'}},y:{grid:{color:grid}}}}
+});
+
+// ── Monthly P&L chart ──────────────────────────────────────────────────
+new Chart(document.getElementById('monthlyPnlChart'),{
+  type:'line',
+  data:{
+    labels:MONTHS,
+    datasets:[
+      {label:'Gross Revenue',data:grossRev,borderColor:'rgba(30,95,204,0.7)',backgroundColor:'rgba(30,95,204,0.06)',fill:true,tension:0.4,pointRadius:2,borderWidth:2},
+      {label:'Net Revenue',  data:netRev,  borderColor:'rgba(14,124,110,0.9)',backgroundColor:'rgba(14,124,110,0.08)',fill:true,tension:0.4,pointRadius:2,borderWidth:2},
+    ]
+  },
+  options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{usePointStyle:true}}},
+    scales:{x:{grid:{color:grid}},y:{grid:{color:grid},ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M'}}}}
+});
+
+// ── Reconciliation ─────────────────────────────────────────────────────
+function renderRecon(){
+  const fundF   = document.getElementById('reconFundFilter').value;
+  const periodF = document.getElementById('reconPeriod').value;
+  const filter  = document.getElementById('reconFilter').value;
+
+  let data = RECON_DATA;
+  if(fundF   !== 'all') data = data.filter(r=>r.fund===fundF);
+  if(periodF !== 'all') data = data.filter(r=>r.period===periodF);
+  if(filter  === 'breaks')    data = data.filter(r=>r.isBreak);
+  if(filter  === 'matched')   data = data.filter(r=>r.status==='Matched');
+  if(filter  === 'escalated') data = data.filter(r=>r.status==='Escalated');
+
+  const total    = data.length;
+  const matched  = data.filter(r=>r.status==='Matched').length;
+  const breaks   = data.filter(r=>r.isBreak).length;
+  const esc      = data.filter(r=>r.status==='Escalated').length;
+
+  document.getElementById('rs-total').textContent   = total.toLocaleString();
+  document.getElementById('rs-matched').textContent = matched.toLocaleString();
+  document.getElementById('rs-breaks').textContent  = breaks.toLocaleString();
+  document.getElementById('rs-esc').textContent     = esc.toLocaleString();
+  document.getElementById('recon-chip').textContent = `${breaks} BREAKS`;
+
+  const statusClass = {Matched:'status-ok',Resolved:'status-ok',Escalated:'status-err'};
+  const show = data.slice(0,60);
+  document.getElementById('reconTable').innerHTML = show.map(r=>`
+    <tr>
+      <td class="mono" style="font-size:10px">${r.period}</td>
+      <td class="mono" style="font-size:10px">${r.fund.replace('BLK-','')}</td>
+      <td class="muted" style="font-size:11px">${r.sc}</td>
+      <td class="right">$${r.blk.toLocaleString()}</td>
+      <td class="right">$${r.admin.toLocaleString()}</td>
+      <td class="right" style="color:${r.diff>0?'var(--amber)':r.diff<0?'var(--red)':'var(--green)'}">
+        ${r.diff>=0?'+':''}$${r.diff.toLocaleString()}</td>
+      <td class="right" style="font-size:10px">${r.pct}%</td>
+      <td><span class="${statusClass[r.status]||'status-warn'}">${r.status}</span></td>
+    </tr>`).join('');
+}
+renderRecon();
+
+// ── Break causes chart ─────────────────────────────────────────────────
+const allBreaks = RECON_DATA.filter(r=>r.isBreak);
+const causeCounts={};
+allBreaks.forEach(r=>{ causeCounts[r.cause]=(causeCounts[r.cause]||0)+1; });
+new Chart(document.getElementById('causesChart'),{
+  type:'doughnut',
+  data:{labels:Object.keys(causeCounts),datasets:[{data:Object.values(causeCounts),
+    backgroundColor:['#1e5fcc','#0e7c6e','#b7610a','#c0392b'],
+    borderColor:'#fff',borderWidth:3}]},
+  options:{responsive:true,maintainAspectRatio:true,
+    plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:10,font:{size:10}}}}}
+});
+
+new Chart(document.getElementById('breakRateChart'),{
+  type:'bar',
+  data:{labels:MONTHS,datasets:[{label:'Break Rate',data:breakRates,
+    backgroundColor:'rgba(192,57,43,0.6)',borderRadius:3}]},
+  options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},
+    scales:{x:{grid:{color:grid}},y:{grid:{color:grid},ticks:{callback:v=>v+'%'},max:6}}}
+});
+
+// ── Journal entries table ──────────────────────────────────────────────
+document.getElementById('jeTable').innerHTML = JE_SAMPLE.map(j=>`
+  <tr>
+    <td class="mono" style="font-size:11px">${j.id}</td>
+    <td class="mono" style="font-size:11px">${j.period}</td>
+    <td class="mono" style="font-size:11px">${j.fund.replace('BLK-','')}</td>
+    <td class="muted" style="font-size:11px">${j.sc}</td>
+    <td style="font-size:12px">${j.acct}</td>
+    <td class="right" style="color:var(--blue)">${j.debit>0?'$'+j.debit.toLocaleString():'—'}</td>
+    <td class="right" style="color:var(--teal)">${j.credit>0?'$'+j.credit.toLocaleString():'—'}</td>
+    <td class="muted" style="font-size:11px;white-space:normal;max-width:260px">${j.desc}</td>
+  </tr>`).join('');
+
+// ── Section nav ────────────────────────────────────────────────────────
+function showSection(id,btn){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Stagger animations ─────────────────────────────────────────────────
+document.querySelectorAll('.kpi-card').forEach((c,i)=>c.style.animationDelay=`${i*0.06}s`);
+document.querySelectorAll('.panel').forEach((p,i)=>p.style.animationDelay=`${i*0.07+0.08}s`);
+document.querySelectorAll('.pipe-step').forEach((p,i)=>p.style.animationDelay=`${i*0.05}s`);
+</script>
+</body>
+</html>

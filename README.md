@@ -1,6 +1,6 @@
 # Revenue Accrual and Fee Reconciliation Engine
 
-**Sara Iqbal** | MSc Data Science | Portfolio Project
+**Sara Iqbal** | MSc Data Science 
 
 [Live Dashboard](https://sara-iqbal.github.io/Revenue-Accrual-Fee-Reconciliation-Engine/) | [Google Colab Notebook](https://sara-iqbal.github.io/Revenue-Accrual-Fee-Reconciliation-Engine/) | [LinkedIn](https://www.linkedin.com/in/saraiqbaldata0602/)
 
